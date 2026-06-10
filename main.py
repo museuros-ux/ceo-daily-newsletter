@@ -19,14 +19,13 @@ NEARBY_ORGS = ["안양도시공사", "군포도시공사", "시흥도시공사",
 
 CATEGORIES = {
     "의왕시 동향": ["의왕시"],
-    "지방공사·공단 동향": ["도시공사", "시설관리공단"],
+    "지방공사·공단 동향": ["도시공사", "지방공사", "지방공단", "지방공기업", "시설관리공단"],
     "경영평가 동향": ["경영평가"],
     "개발 동향": ["도시개발", "도시재생", "택지개발", "재개발", "재건축"],
     "CEO 동향": ["도시공사 사장", "시설공단 이사장", "지방공기업 대표"],
 }
 
 SECONDARY_FILTER = {
-    "지방공사·공단 동향": ["공사", "공단", "도시공사", "시설관리공단", "지방공기업"],
     "경영평가 동향": ["공기업", "지방공사", "지방공단", "도시공사", "시설공단", "공단", "공사"],
 }
 
@@ -96,10 +95,12 @@ def collect_news(start_date, end_date):
                     desc = item['description']
                     combined = title + desc
 
+                    # 지방공사·공단: 인근 도시공사 7개 제외
                     if category == "지방공사·공단 동향":
-                        if not any(f in combined for f in SECONDARY_FILTER["지방공사·공단 동향"]):
+                        if any(org in combined for org in NEARBY_ORGS):
                             continue
 
+                    # 경영평가: 2차 필터
                     if category == "경영평가 동향":
                         if not any(f in combined for f in SECONDARY_FILTER["경영평가 동향"]):
                             continue
