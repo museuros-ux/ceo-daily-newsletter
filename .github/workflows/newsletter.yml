@@ -13,11 +13,12 @@ jobs:
         with:
           python-version: '3.11'
       - name: 패키지 설치
-        run: pip install requests
+        run: pip install requests google-genai
       - name: 뉴스레터 실행
         env:
           NAVER_CLIENT_ID: ${{ secrets.NAVER_CLIENT_ID }}
           NAVER_CLIENT_SECRET: ${{ secrets.NAVER_CLIENT_SECRET }}
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           GMAIL_ADDRESS: ${{ secrets.GMAIL_ADDRESS }}
           GMAIL_APP_PASSWORD: ${{ secrets.GMAIL_APP_PASSWORD }}
           RECIPIENT_EMAILS: ${{ secrets.RECIPIENT_EMAILS }}
