@@ -98,22 +98,18 @@ def collect_news(start_date, end_date):
                     desc = item['description']
                     combined = title + desc
 
-                    # 지방공사·공단: 2차 필터
                     if category == "지방공사·공단 동향":
                         if not any(f in combined for f in SECONDARY_FILTER["지방공사·공단 동향"]):
                             continue
 
-                    # 경영평가: 2차 필터
                     if category == "경영평가 동향":
                         if not any(f in combined for f in SECONDARY_FILTER["경영평가 동향"]):
                             continue
 
-                    # 개발: 느슨한 2차 필터
                     if category == "개발 동향":
                         if not any(f in combined for f in SECONDARY_FILTER["개발 동향"]):
                             continue
 
-                    # CEO 동향: "사장"만 2차 필터, CEO/최고경영자는 필터 없음
                     if category == "CEO 동향" and kw == "사장":
                         if not any(f in combined for f in SECONDARY_FILTER["CEO 동향_사장"]):
                             continue
@@ -208,12 +204,14 @@ def get_insight_json(news_data, date_label):
         "  ]\n"
         "}\n\n"
         "작성 기준:\n"
+        "- 수집된 기사가 있으면 반드시 해당 카테고리에 포함할 것. 임의로 제외하지 말 것\n"
         "- 동일한 사건·정책을 다룬 중복 기사는 하나로 병합하여 동향 1개로만 작성\n"
         "- 병합 시 관련 기사 링크를 출처 배열에 최대 3개까지 포함\n"
         "- 완전히 다른 독립적인 이슈만 별개 동향으로 분리할 것\n"
         "- 제목요약: 핵심을 15자 내외로 간결하게 요약\n"
         "- 각 동향은 기사 내용을 2~3개 꼭지로 나눠 개조식으로 작성. 특수기호(○ 등) 사용 금지\n"
         "- 각 꼭지는 명사형 또는 단문으로 끝낼 것. 서술식 금지\n"
+        "- 지방공사·공단 동향: 무연고자 장례·복지 서비스 등 공사·공단 본연 업무와 무관한 기사 제외\n"
         "- 관련 기사 없으면 빈 배열 []\n"
         "- 출처 제목과 링크는 반드시 원문에 실제로 존재하는 기사만\n"
         "- 원문에 없는 내용 절대 생성 금지\n"
@@ -277,7 +275,6 @@ def build_html(nearby_json, insight_json, date_label):
     content_html = ""
     num = 1
 
-    # 1. 의왕시 동향
     content_html += (
         "<div style='margin-top:30px;'>"
         "<div style='font-size:15px;font-weight:bold;color:white;background:#1a3a6b;"
@@ -288,7 +285,6 @@ def build_html(nearby_json, insight_json, date_label):
     content_html += "</div>"
     num += 1
 
-    # 2. 인근 도시공사 동향
     content_html += (
         "<div style='margin-top:30px;'>"
         "<div style='font-size:15px;font-weight:bold;color:white;background:#1a3a6b;"
@@ -299,7 +295,6 @@ def build_html(nearby_json, insight_json, date_label):
     content_html += "</div>"
     num += 1
 
-    # 3~6. 나머지 카테고리
     remaining = ["지방공사·공단 동향", "경영평가 동향", "개발 동향", "CEO 동향"]
     for category in remaining:
         icon = category_icons.get(category, "📌")
