@@ -28,7 +28,7 @@ CATEGORIES = {
 SECONDARY_FILTER = {
     "지방공사·공단 동향": ["공사", "공단", "도시공사", "시설관리공단", "지방공기업"],
     "경영평가 동향": ["공기업", "지방공사", "지방공단", "도시공사", "시설공단", "공단", "공사"],
-    "개발 동향": ["개발사업", "도시개발", "재개발", "재건축", "산업단지", "택지개발", "개발계획", "개발구역"],
+    "개발 동향": ["공사", "공단", "시", "구", "군", "사업", "지구", "단지", "재개발", "재건축"],
     "CEO 동향_사장": ["기업", "공사", "공단", "대표", "경영", "회장", "취임", "선임", "임원", "CEO"],
 }
 
@@ -108,12 +108,12 @@ def collect_news(start_date, end_date):
                         if not any(f in combined for f in SECONDARY_FILTER["경영평가 동향"]):
                             continue
 
-                    # 개발: 2차 필터
+                    # 개발: 느슨한 2차 필터
                     if category == "개발 동향":
                         if not any(f in combined for f in SECONDARY_FILTER["개발 동향"]):
                             continue
 
-                    # CEO 동향: "사장" 키워드는 2차 필터
+                    # CEO 동향: "사장"만 2차 필터, CEO/최고경영자는 필터 없음
                     if category == "CEO 동향" and kw == "사장":
                         if not any(f in combined for f in SECONDARY_FILTER["CEO 동향_사장"]):
                             continue
@@ -257,7 +257,6 @@ def build_html(nearby_json, insight_json, date_label):
                 if source_items:
                     source_html = "<div style='margin-top:6px;'>출처:<br>" + source_items + "</div>"
 
-            header = ""
             if org_name:
                 header = "[" + org_name + "] " + str(j) + ". " + title_summary
             else:
