@@ -5,9 +5,12 @@ import smtplib
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from datetime import datetime, timedelta
+from google import genai
+from google.genai import types
 
 NAVER_CLIENT_ID = os.environ['NAVER_CLIENT_ID']
 NAVER_CLIENT_SECRET = os.environ['NAVER_CLIENT_SECRET']
+GEMINI_API_KEY = os.environ['GEMINI_API_KEY']
 GMAIL_ADDRESS = os.environ['GMAIL_ADDRESS']
 GMAIL_APP_PASSWORD = os.environ['GMAIL_APP_PASSWORD']
 RECIPIENT_EMAILS = os.environ['RECIPIENT_EMAILS'].split(',')
@@ -16,8 +19,13 @@ CATEGORIES = {
     "의왕시 동향": ["의왕시"],
     "지방공사·공단 동향": ["도시공사", "시설관리공단"],
     "경영평가 동향": ["경영평가"],
-    "개발사업 동향": ["개발사업"],
-    "CEO 동향": ["사장", "CEO"],
+    "개발 동향": ["개발"],
+    "CEO 동향": ["CEO", "최고경영자", "사장"],
+}
+
+SECONDARY_FILTER = {
+    "경영평가 동향": ["공기업", "지방공사", "지방공단", "도시공사", "시설공단", "공단", "공사"],
+    "CEO 동향_사장": ["기업", "공사", "공단", "대표", "경영", "회장", "취임", "선임", "임원"],
 }
 
 def get_date_range():
@@ -55,6 +63,7 @@ def search_naver_news(query, start_date, end_date, display=100):
         if pub_date and start_date <= pub_date <= end_date:
             filtered.append({
                 "title": item['title'].replace('<b>', '').replace('</b>', ''),
+                "description": item['description'].replace('<b>', '').replace('</b>', ''),
                 "link": item['link'],
                 "pubDate": item['pubDate']
             })
@@ -69,23 +78,105 @@ def collect_news(start_date, end_date):
             items = search_naver_news(kw, start_date, end_date)
             for item in items:
                 if item['title'] not in seen_titles:
-                    if kw in item['title']:
-                        seen_titles.add(item['title'])
-                        articles.append(item)
+                    title = item['title']
+                    desc = item['description']
+
+                    # 경영평가: 2차 필터 (공기업·지방공사·공단 관련)
+                    if category == "경영평가 동향":
+                        if not any(f in title + desc for f in SECONDARY_FILTER["경영평가 동향"]):
+                            continue
+
+                    # CEO 동향: "사장" 키워드는 2차 필터 적용
+                    if category == "CEO 동향" and kw == "사장":
+                        if not any(f in title + desc for f in SECONDARY_FILTER["CEO 동향_사장"]):
+                            continue
+
+                    seen_titles.add(title)
+                    articles.append(item)
         results[category] = articles
     return results
 
-def build_html(news_data, date_label):
+def build_news_text(news_data):
+    news_text = ""
+    for category, articles in news_data.items():
+        news_text += f"\n## {category}\n"
+        if not articles:
+            news_text += "- 해당 기간 기사 없음\n"
+        else:
+            for a in articles[:20]:
+                news_text += "- 제목: " + a['title'] + " | 설명: " + a['description'] + " | 링크: " + a['link'] + "\n"
+    return news_text
+
+def call_gemini_json(prompt, retries=3):
+    import time
+    client = genai.Client(api_key=GEMINI_API_KEY)
+    for attempt in range(retries):
+        try:
+            response = client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt,
+                config=types.GenerateContentConfig(
+                    response_mime_type="application/json",
+                )
+            )
+            return json.loads(response.text)
+        except Exception as e:
+            if attempt < retries - 1:
+                time.sleep(10)
+            else:
+                raise e
+
+def get_insight_json(news_data, date_label):
+    news_text = build_news_text(news_data)
+    prompt = (
+        "당신은 뉴스 분석 AI입니다.\n\n"
+        f"아래는 {date_label} 수집된 보도자료입니다 (제목|설명|링크 형식):\n"
+        + news_text
+        + "\n\n아래 JSON 형식으로만 응답하세요. JSON 외 다른 텍스트 절대 금지.\n\n"
+        "{\n"
+        '  "의왕시 동향": [\n'
+        '    {"제목요약": "핵심을 15자 내외로 요약", "동향": ["꼭지1", "꼭지2"], "출처": [{"제목": "기사제목", "링크": "기사링크"}]}\n'
+        "  ],\n"
+        '  "지방공사·공단 동향": [\n'
+        '    {"제목요약": "핵심을 15자 내외로 요약", "동향": ["꼭지1", "꼭지2"], "출처": [{"제목": "기사제목", "링크": "기사링크"}]}\n'
+        "  ],\n"
+        '  "경영평가 동향": [\n'
+        '    {"제목요약": "핵심을 15자 내외로 요약", "동향": ["꼭지1", "꼭지2"], "출처": [{"제목": "기사제목", "링크": "기사링크"}]}\n'
+        "  ],\n"
+        '  "개발 동향": [\n'
+        '    {"제목요약": "핵심을 15자 내외로 요약", "동향": ["꼭지1", "꼭지2"], "출처": [{"제목": "기사제목", "링크": "기사링크"}]}\n'
+        "  ],\n"
+        '  "CEO 동향": [\n'
+        '    {"제목요약": "핵심을 15자 내외로 요약", "동향": ["꼭지1", "꼭지2"], "출처": [{"제목": "기사제목", "링크": "기사링크"}]}\n'
+        "  ]\n"
+        "}\n\n"
+        "작성 기준:\n"
+        "- 동일한 사건·정책을 다룬 중복 기사는 하나로 병합하여 동향 1개로만 작성\n"
+        "- 병합 시 관련 기사 링크를 출처 배열에 모두 포함할 것\n"
+        "- 완전히 다른 독립적인 이슈만 별개 동향으로 분리할 것\n"
+        "- 제목요약: 핵심을 15자 내외로 간결하게 요약\n"
+        "- 각 동향은 기사 내용을 2~3개 꼭지로 나눠 개조식으로 작성. 특수기호(○ 등) 사용 금지\n"
+        "- 각 꼭지는 명사형 또는 단문으로 끝낼 것. 서술식 금지\n"
+        "- 관련 기사 없으면 빈 배열 []\n"
+        "- 출처 제목과 링크는 반드시 원문에 실제로 존재하는 기사만\n"
+        "- 원문에 없는 내용 절대 생성 금지\n"
+        "JSON만 출력. 다른 텍스트 없음."
+    )
+    return call_gemini_json(prompt)
+
+def build_html(insight_json, date_label):
     category_icons = {
         "의왕시 동향": "🏙️",
         "지방공사·공단 동향": "🏛️",
         "경영평가 동향": "📊",
-        "개발사업 동향": "🏗️",
+        "개발 동향": "🏗️",
         "CEO 동향": "👔",
     }
 
     content_html = ""
-    for i, (category, articles) in enumerate(news_data.items(), 1):
+    for i, (category, articles) in enumerate(insight_json.items(), 1):
+        if category == "실무제언":
+            continue
         icon = category_icons.get(category, "📌")
         content_html += (
             "<div style='margin-top:30px;'>"
@@ -97,15 +188,33 @@ def build_html(news_data, date_label):
         if not articles:
             content_html += "<div style='color:#999;font-style:italic;padding:6px 0;'>해당일 관련 기사 없음</div>"
         else:
-            for art in articles:
+            for j, item in enumerate(articles, 1):
+                title_summary = item.get('제목요약', '')
+                dong_list = item.get('동향', [])
+                sources = item.get('출처', [])
+
+                dong_html = "".join(
+                    "<li style='margin:4px 0;line-height:1.7;color:#333;'>" + d + "</li>"
+                    for d in dong_list
+                )
+
+                source_html = ""
+                if sources:
+                    source_links = " &nbsp;|&nbsp; ".join(
+                        "<a href='" + s['링크'] + "' style='color:#2c5f9e;font-size:12px;'>📎 " + s['제목'] + "</a>"
+                        for s in sources if s.get('링크')
+                    )
+                    if source_links:
+                        source_html = "<div style='margin-top:6px;'>출처: " + source_links + "</div>"
+
                 content_html += (
-                    "<div style='border:1px solid #e0e0e0;border-radius:6px;padding:10px 16px;"
-                    "margin-bottom:8px;background:#fafafa;'>"
-                    "<a href='" + art['link'] + "' style='color:#1a3a6b;font-weight:bold;"
-                    "text-decoration:none;font-size:14px;line-height:1.6;"
-                    "display:block;word-break:keep-all;white-space:normal;'>"
-                    + art['title'] +
-                    "</a>"
+                    "<div style='border:1px solid #e0e0e0;border-radius:6px;padding:12px 16px;"
+                    "margin-bottom:12px;background:#fafafa;'>"
+                    "<div style='font-weight:bold;color:#1a3a6b;margin-bottom:8px;'>"
+                    + category + " " + str(j) + ". " + title_summary +
+                    "</div>"
+                    "<ul style='margin:4px 0 8px 0;padding-left:18px;'>" + dong_html + "</ul>"
+                    + source_html +
                     "</div>"
                 )
         content_html += "</div>"
@@ -117,8 +226,8 @@ def build_html(news_data, date_label):
         "<div style='background:#fff3cd;border-left:4px solid #ffc107;"
         "padding:10px 15px;margin-bottom:25px;border-radius:4px;"
         "font-size:13px;color:#856404;'>"
-        "⚠ 본 뉴스레터는 네이버 뉴스에서 자동으로 수집한 기사 목록입니다. "
-        "참고자료로 활용하시기 바랍니다."
+        "⚠ 본 뉴스레터는 AI(Gemini)가 자동으로 수집·분석하여 작성한 내용입니다. "
+        "기사 선별 과정에서 오류가 있을 수 있으니 참고자료로 활용하시기 바랍니다."
         "</div>"
         "<h1 style='font-size:22px;color:#1a3a6b;border-bottom:3px solid #1a3a6b;"
         "padding-bottom:10px;margin-bottom:5px;text-align:center;'>"
@@ -157,7 +266,8 @@ def main():
         date_label = yesterday.strftime('%m.%d(%a)')
 
     news_data = collect_news(start_date, end_date)
-    html_content = build_html(news_data, date_label)
+    insight_json = get_insight_json(news_data, date_label)
+    html_content = build_html(insight_json, date_label)
     subject = "의왕도시공사 CEO 데일리 뉴스레터(" + today.strftime('%Y.%m.%d.') + ")"
     send_email(subject, html_content)
     print("발송 완료")
