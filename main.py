@@ -95,12 +95,10 @@ def collect_news(start_date, end_date):
                     desc = item['description']
                     combined = title + desc
 
-                    # 지방공사·공단: 인근 도시공사 7개 제외
                     if category == "지방공사·공단 동향":
                         if any(org in combined for org in NEARBY_ORGS):
                             continue
 
-                    # 경영평가: 2차 필터
                     if category == "경영평가 동향":
                         if not any(f in combined for f in SECONDARY_FILTER["경영평가 동향"]):
                             continue
@@ -203,6 +201,7 @@ def get_insight_json(news_data, date_label):
         "- 제목요약: 반드시 주체(기관명, 지자체명 등)를 원문 그대로 정확하게 포함하여 '주체, 핵심내용' 형태로 20자 내외로 요약. 기관명 임의 축약 금지\n"
         "- 각 동향은 기사 내용을 2~3개 꼭지로 나눠 개조식으로 작성. 특수기호(○ 등) 사용 금지\n"
         "- 각 꼭지는 명사형 또는 단문으로 끝낼 것. 서술식 금지\n"
+        "- 지방공사·공단 동향: 도시공사 관련 기사를 반드시 포함할 것. 시설관리공단 기사에만 치우치지 말 것\n"
         "- 지방공사·공단 동향: 무연고자 장례·복지 서비스 등 본연 업무와 무관한 기사 제외\n"
         "- 관련 기사 없으면 빈 배열 []\n"
         "- 출처 제목과 링크는 반드시 원문에 실제로 존재하는 기사만\n"
