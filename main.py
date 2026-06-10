@@ -102,7 +102,8 @@ def build_html(news_data, date_label):
                     "<div style='border:1px solid #e0e0e0;border-radius:6px;padding:10px 16px;"
                     "margin-bottom:8px;background:#fafafa;'>"
                     "<a href='" + art['link'] + "' style='color:#1a3a6b;font-weight:bold;"
-                    "text-decoration:none;font-size:14px;line-height:1.6;'>"
+                    "text-decoration:none;font-size:14px;line-height:1.6;"
+                    "display:block;word-break:keep-all;white-space:normal;'>"
                     + art['title'] +
                     "</a>"
                     "</div>"
