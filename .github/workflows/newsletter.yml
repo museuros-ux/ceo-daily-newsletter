@@ -1,7 +1,7 @@
 name: CEO 데일리 뉴스레터
 on:
   schedule:
-    - cron: '30 23 * * 0-4'  # 한국시간 08:30 (UTC 23:30)
+    - cron: '30 21 * * 0-4'  # 한국시간 06:30 (UTC 21:30)
   workflow_dispatch:
 jobs:
   send-newsletter:
