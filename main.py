@@ -27,9 +27,8 @@ CATEGORIES = {
 }
 
 SECONDARY_FILTER = {
-    "지방공사 동향": ["공사", "도시공사", "지방공사", "지방공기업"],
     "지방공단 동향": ["공단", "시설관리공단", "지방공단"],
-    "경영평가 동향": ["공기업", "지방공사", "지방공단", "도시공사", "시설공단", "공단", "공사"],
+    "경영평가 동향": ["공기업", "지방공사", "지방공단", "도시공사", "시설공단", "공단", "공사", "지방공기업"],
 }
 
 CEO_TITLE_KEYWORDS = ["사장", "CEO", "이사장", "대표이사", "최고경영자"]
@@ -100,11 +99,11 @@ def collect_news(start_date, end_date):
                     desc = item['description']
                     combined = title + desc
 
-                    # 지방공사 동향: 인근 도시공사 제외
+                    # 지방공사 동향: 제목에 "도시공사" 포함 + 인근 7개 기관 제외
                     if category == "지방공사 동향":
-                        if any(org in title for org in NEARBY_ORGS):
+                        if "도시공사" not in title:
                             continue
-                        if not any(f in combined for f in SECONDARY_FILTER["지방공사 동향"]):
+                        if any(org in title for org in NEARBY_ORGS):
                             continue
 
                     # 지방공단 동향: 2차 필터
@@ -112,8 +111,10 @@ def collect_news(start_date, end_date):
                         if not any(f in combined for f in SECONDARY_FILTER["지방공단 동향"]):
                             continue
 
-                    # 경영평가: 2차 필터
+                    # 경영평가: 1차 제목 필터 + 2차 지방공기업 필터
                     if category == "경영평가 동향":
+                        if "경영평가" not in title:
+                            continue
                         if not any(f in combined for f in SECONDARY_FILTER["경영평가 동향"]):
                             continue
 
@@ -173,7 +174,7 @@ def get_nearby_json(nearby_articles, date_label):
         + "\n\n아래 JSON 형식으로만 응답하세요. JSON 외 다른 텍스트 절대 금지.\n\n"
         "{\n"
         '  "인근도시공사": [\n'
-        '    {"기관명": "안양도시공사", "제목요약": "반드시 주체(기관명)를 포함하여 \'주체, 핵심내용\' 형태로 20자 내외 요약. 기관명 임의 축약 금지", "동향": ["꼭지1", "꼭지2"], "출처": [{"제목": "기사제목", "링크": "기사링크"}]}\n'
+        '    {"기관명": "안양도시공사", "제목요약": "핵심내용 20자 내외 요약 (주체 생략)", "동향": ["꼭지1", "꼭지2"], "출처": [{"제목": "기사제목", "링크": "기사링크"}]}\n'
         "  ]\n"
         "}\n\n"
         "작성 기준:\n"
@@ -181,6 +182,7 @@ def get_nearby_json(nearby_articles, date_label):
         "- 각 동향은 2~3개 꼭지로 개조식 작성. 특수기호 사용 금지\n"
         "- 각 꼭지는 명사형 또는 단문으로 끝낼 것. 서술식 금지\n"
         "- 기관명은 원문 그대로 정확하게 표기. 임의 축약 금지\n"
+        "- 제목요약: 기관명 없이 핵심내용만 20자 내외로 요약 (기관명은 기관명 필드에 별도 표기됨)\n"
         "- 원문에 없는 내용 절대 생성 금지\n"
         "- 관련 기사 없으면 빈 배열 []\n"
         "JSON만 출력. 다른 텍스트 없음."
@@ -242,11 +244,11 @@ def build_html(nearby_json, insight_json, date_label):
         "CEO 동향": "👔",
     }
 
-    def render_articles(category, articles):
+    def render_nearby(articles):
         html = ""
         if not articles:
             return "<div style='color:#999;font-style:italic;padding:6px 0;'>해당일 관련 기사 없음</div>"
-        for j, item in enumerate(articles, 1):
+        for item in articles:
             org_name = item.get('기관명', '')
             title_summary = item.get('제목요약', '')
             dong_list = item.get('동향', [])
@@ -268,16 +270,48 @@ def build_html(nearby_json, insight_json, date_label):
                 if source_items:
                     source_html = "<div style='margin-top:6px;'>출처:<br>" + source_items + "</div>"
 
-            if org_name:
-                header = "[" + org_name + "] " + str(j) + ". " + title_summary
-            else:
-                header = category + " " + str(j) + ". " + title_summary
+            html += (
+                "<div style='border:1px solid #e0e0e0;border-radius:6px;padding:12px 16px;"
+                "margin-bottom:12px;background:#fafafa;'>"
+                "<div style='font-weight:bold;color:#1a3a6b;margin-bottom:8px;'>"
+                + ("[" + org_name + "] " if org_name else "") + title_summary +
+                "</div>"
+                "<ul style='margin:4px 0 8px 0;padding-left:18px;'>" + dong_html + "</ul>"
+                + source_html +
+                "</div>"
+            )
+        return html
+
+    def render_articles(category, articles):
+        html = ""
+        if not articles:
+            return "<div style='color:#999;font-style:italic;padding:6px 0;'>해당일 관련 기사 없음</div>"
+        for j, item in enumerate(articles, 1):
+            title_summary = item.get('제목요약', '')
+            dong_list = item.get('동향', [])
+            sources = item.get('출처', [])[:3]
+
+            dong_html = "".join(
+                "<li style='margin:4px 0;line-height:1.7;color:#333;'>" + d + "</li>"
+                for d in dong_list
+            )
+
+            source_html = ""
+            if sources:
+                source_items = "".join(
+                    "<div style='margin:3px 0;'>"
+                    "<a href='" + s['링크'] + "' style='color:#2c5f9e;font-size:12px;'>📎 " + s['제목'] + "</a>"
+                    "</div>"
+                    for s in sources if s.get('링크')
+                )
+                if source_items:
+                    source_html = "<div style='margin-top:6px;'>출처:<br>" + source_items + "</div>"
 
             html += (
                 "<div style='border:1px solid #e0e0e0;border-radius:6px;padding:12px 16px;"
                 "margin-bottom:12px;background:#fafafa;'>"
                 "<div style='font-weight:bold;color:#1a3a6b;margin-bottom:8px;'>"
-                + header +
+                + category + " " + str(j) + ". " + title_summary +
                 "</div>"
                 "<ul style='margin:4px 0 8px 0;padding-left:18px;'>" + dong_html + "</ul>"
                 + source_html +
@@ -304,7 +338,7 @@ def build_html(nearby_json, insight_json, date_label):
         "padding:7px 14px;border-radius:6px;margin-bottom:12px;'>"
         "🏢 " + str(num) + ". 인근 도시공사 동향</div>"
     )
-    content_html += render_articles("인근 도시공사 동향", nearby_json.get("인근도시공사", []))
+    content_html += render_nearby(nearby_json.get("인근도시공사", []))
     content_html += "</div>"
     num += 1
 
