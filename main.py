@@ -56,14 +56,19 @@ def search_naver_news(query, start_date, end_date, display=100):
         "X-Naver-Client-Id": NAVER_CLIENT_ID,
         "X-Naver-Client-Secret": NAVER_CLIENT_SECRET
     }
-    params = {"query": query, "display": display, "sort": "date"}
-    try:
-        res = requests.get(url, headers=headers, params=params, timeout=10)
-        items = res.json().get('items', [])
-    except:
-        return []
+    all_items = []
+    for start in [1, 101, 201]:
+        params = {"query": query, "display": display, "sort": "date", "start": start}
+        try:
+            res = requests.get(url, headers=headers, params=params, timeout=10)
+            items = res.json().get('items', [])
+            if not items:
+                break
+            all_items.extend(items)
+        except:
+            break
     filtered = []
-    for item in items:
+    for item in all_items:
         pub_date = parse_naver_date(item.get('pubDate', ''))
         if pub_date and start_date <= pub_date <= end_date:
             filtered.append({
@@ -99,26 +104,22 @@ def collect_news(start_date, end_date):
                     desc = item['description']
                     combined = title + desc
 
-                    # 지방공사 동향: 제목에 "도시공사" 포함 + 인근 7개 기관 제외
                     if category == "지방공사 동향":
                         if "도시공사" not in title:
                             continue
                         if any(org in title for org in NEARBY_ORGS):
                             continue
 
-                    # 지방공단 동향: 2차 필터
                     if category == "지방공단 동향":
                         if not any(f in combined for f in SECONDARY_FILTER["지방공단 동향"]):
                             continue
 
-                    # 경영평가: 1차 제목 필터 + 2차 지방공기업 필터
                     if category == "경영평가 동향":
                         if "경영평가" not in title:
                             continue
                         if not any(f in combined for f in SECONDARY_FILTER["경영평가 동향"]):
                             continue
 
-                    # CEO 동향: 제목에 사장/CEO 포함된 것만
                     if category == "CEO 동향":
                         if not any(kw in title for kw in CEO_TITLE_KEYWORDS):
                             continue
@@ -182,7 +183,7 @@ def get_nearby_json(nearby_articles, date_label):
         "- 각 동향은 2~3개 꼭지로 개조식 작성. 특수기호 사용 금지\n"
         "- 각 꼭지는 명사형 또는 단문으로 끝낼 것. 서술식 금지\n"
         "- 기관명은 원문 그대로 정확하게 표기. 임의 축약 금지\n"
-        "- 제목요약: 기관명 없이 핵심내용만 20자 내외로 요약 (기관명은 기관명 필드에 별도 표기됨)\n"
+        "- 제목요약: 기관명 없이 핵심내용만 20자 내외로 요약\n"
         "- 원문에 없는 내용 절대 생성 금지\n"
         "- 관련 기사 없으면 빈 배열 []\n"
         "JSON만 출력. 다른 텍스트 없음."
